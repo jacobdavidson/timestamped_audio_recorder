@@ -51,6 +51,11 @@ def main():
     parser.add_argument('--subtype', type=str, default='PCM_16', help='Sound file subtype (e.g., PCM_16, PCM_24, FLOAT)')
     args = parser.parse_args()
 
+    if args.device is None:
+        print("No recording device specified. Please choose a device from the available list below:")
+        print(sd.query_devices())
+        sys.exit(1)
+    
     if args.print_devices:
         print("Available audio devices:")
         print(sd.query_devices())
