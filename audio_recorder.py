@@ -1,10 +1,11 @@
 import sounddevice as sd
-from scipy.io.wavfile import write
+import soundfile as sf
 from datetime import datetime, timezone
-import numpy as np
 import argparse
 import sys
 from pathlib import Path
+import queue
+import time
 
 # Function to convert datetime to formatted string
 def dt_to_str(dt):
@@ -15,9 +16,7 @@ def dt_to_str(dt):
         dt_str += ".{:06d}".format(dt.microsecond)
     if dt.tzinfo is not None and dt.utcoffset().total_seconds() == 0:
         dt_str += "Z"
-        return dt_str
-    else:
-        return dt_str
+    return dt_str
 
 # Function to generate timestamped filename
 def get_timestamped_filename(prefix, output_dir, use_utc=False):
@@ -29,25 +28,11 @@ def get_timestamped_filename(prefix, output_dir, use_utc=False):
     filename = f"{prefix}_{timestamp_str}.wav"
     return output_dir / filename
 
-# Function to record audio chunk
-def record_audio_chunk(duration, fs, channels, device=None):
-    print(f"Recording audio chunk for {duration} seconds...")
-    try:
-        audio_data = sd.rec(int(duration * fs), samplerate=fs, channels=channels, dtype='int16', device=device)
-        sd.wait()  # Wait for the recording to finish
-    except Exception as e:
-        print(f"An error occurred during recording: {e}")
-        sys.exit(1)
-    return audio_data
-
-# Function to save audio data to a file
-def save_audio(filename, fs, audio_data):
-    try:
-        write(filename, fs, audio_data)
-        print(f"Recording saved as {filename}")
-    except Exception as e:
-        print(f"An error occurred while saving the file: {e}")
-        sys.exit(1)
+# Callback function for streaming audio data
+def audio_callback(indata, frames, time, status):
+    if status:
+        print(status, file=sys.stderr)
+    q.put(indata.copy())
 
 # Main function
 def main():
@@ -73,21 +58,37 @@ def main():
     if not output_dir.exists():
         output_dir.mkdir(parents=True, exist_ok=True)
 
-    start_time = datetime.now()
-    elapsed_time = 0
+    global q
+    q = queue.Queue()
 
     try:
-        while True:
-            # Check if total duration is specified and if elapsed time exceeds it
-            if args.total_duration and elapsed_time >= args.total_duration:
-                print("Total recording duration reached. Exiting.")
-                break
+        with sd.InputStream(samplerate=args.samplerate, device=args.device,
+                            channels=args.channels, callback=audio_callback):
+            print('#' * 80)
+            print('Recording... Press Ctrl+C to stop the recording.')
+            print('#' * 80)
 
-            filename = get_timestamped_filename(args.prefix, output_dir, use_utc=args.use_utc)
-            audio_data = record_audio_chunk(args.duration, args.samplerate, args.channels, device=args.device)
-            save_audio(filename, args.samplerate, audio_data)
+            start_time = time.time()
+            elapsed_time = 0
 
-            elapsed_time = (datetime.now() - start_time).total_seconds()
+            while True:
+                print(f"Recording audio chunk for {args.duration} seconds...")
+                if args.total_duration and elapsed_time >= args.total_duration:
+                    print("Total recording duration reached. Exiting.")
+                    break
+
+                # Create a new chunk file
+                filename = get_timestamped_filename(args.prefix, output_dir, use_utc=args.use_utc)
+
+                # Write chunks for the specified duration
+                with sf.SoundFile(filename, mode='x', samplerate=args.samplerate,
+                                  channels=args.channels, subtype='PCM_16') as file:
+                    chunk_start_time = time.time()
+                    while time.time() - chunk_start_time < args.duration:
+                        file.write(q.get())
+
+                elapsed_time = time.time() - start_time
+
     except KeyboardInterrupt:
         print("\nRecording interrupted by user. Exiting.")
     except Exception as e:
