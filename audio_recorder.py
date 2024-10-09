@@ -1,6 +1,6 @@
 import sounddevice as sd
 import soundfile as sf
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import argparse
 import sys
 from pathlib import Path
@@ -46,6 +46,7 @@ def main():
     parser.add_argument('--prefix', type=str, default='audio_recording', help='Custom prefix for the filename')
     parser.add_argument('--use-utc', action='store_true', help='Use UTC time for the filename timestamp (default is local time)')
     parser.add_argument('--output-dir', type=str, default='.', help='Output directory for the recording files')
+    parser.add_argument('--align-chunks', action='store_true', help='Align recording chunks to specific time boundaries')
     args = parser.parse_args()
 
     if args.print_devices:
@@ -68,11 +69,23 @@ def main():
             print('Recording... Press Ctrl+C to stop the recording.')
             print('#' * 80)
 
-            start_time = time.time()
+            start_time = datetime.now()
             elapsed_time = 0
 
             while True:
-                print(f"Recording audio chunk for {args.duration} seconds...")
+                current_time = datetime.now()
+                if args.align_chunks:
+                    # Calculate the next alignment point based on the duration argument
+                    next_chunk_time = (current_time + timedelta(seconds=args.duration)).replace(second=0, microsecond=0)
+                    while next_chunk_time < current_time:
+                        next_chunk_time += timedelta(seconds=args.duration)
+
+                    duration_to_next_boundary = (next_chunk_time - current_time).total_seconds()
+                    chunk_duration = min(duration_to_next_boundary, args.duration)
+                else:
+                    chunk_duration = args.duration
+
+                print(f"Recording audio chunk for {chunk_duration} seconds...")
                 if args.total_duration and elapsed_time >= args.total_duration:
                     print("Total recording duration reached. Exiting.")
                     break
@@ -84,10 +97,10 @@ def main():
                 with sf.SoundFile(filename, mode='x', samplerate=args.samplerate,
                                   channels=args.channels, subtype='PCM_16') as file:
                     chunk_start_time = time.time()
-                    while time.time() - chunk_start_time < args.duration:
+                    while time.time() - chunk_start_time < chunk_duration:
                         file.write(q.get())
 
-                elapsed_time = time.time() - start_time
+                elapsed_time = (datetime.now() - start_time).total_seconds()
 
     except KeyboardInterrupt:
         print("\nRecording interrupted by user. Exiting.")
