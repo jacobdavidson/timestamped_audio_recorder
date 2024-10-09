@@ -37,7 +37,7 @@ def audio_callback(indata, frames, time, status):
 # Main function
 def main():
     parser = argparse.ArgumentParser(description="Continuous Audio Recording Script")
-    parser.add_argument('-d', '--duration', type=float, default=60, help='Duration of each recording chunk in seconds')
+    parser.add_argument('-d', '--duration', type=float, help='Duration of each recording chunk in seconds')
     parser.add_argument('-t', '--total-duration', type=float, help='Total duration of recording in seconds (default: runs indefinitely until cancelled)')
     parser.add_argument('-r', '--samplerate', type=int, default=44100, help='Sampling rate in Hz')
     parser.add_argument('-c', '--channels', type=int, default=2, help='Number of audio channels')
@@ -53,6 +53,12 @@ def main():
         print("Available audio devices:")
         print(sd.query_devices())
         sys.exit(0)
+
+    # Determine chunk duration and total duration based on input
+    if args.total_duration and not args.duration:
+        args.duration = args.total_duration
+    elif args.duration and not args.total_duration:
+        args.total_duration = args.duration
 
     # Create output directory if it doesn't exist
     output_dir = Path(args.output_dir)
