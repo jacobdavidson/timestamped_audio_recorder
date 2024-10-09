@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import numpy as np
 import argparse
 import sys
+from pathlib import Path
 
 # Function to convert datetime to formatted string
 def dt_to_str(dt):
@@ -16,14 +17,17 @@ def dt_to_str(dt):
         dt_str += "Z"
         return dt_str
     else:
-        raise Exception("Got a datetime object not in UTC. Always use UTC.")
+        return dt_str
 
 # Function to generate timestamped filename
-def get_timestamped_filename():
-    now = datetime.now(timezone.utc)
+def get_timestamped_filename(prefix, output_dir, use_utc=False):
+    if use_utc:
+        now = datetime.now(timezone.utc)
+    else:
+        now = datetime.now()
     timestamp_str = dt_to_str(now)
-    filename = f"audio_recording_{timestamp_str}.wav"
-    return filename
+    filename = f"{prefix}_{timestamp_str}.wav"
+    return output_dir / filename
 
 # Function to record audio chunk
 def record_audio_chunk(duration, fs, channels, device=None):
@@ -54,12 +58,20 @@ def main():
     parser.add_argument('-c', '--channels', type=int, default=2, help='Number of audio channels')
     parser.add_argument('--device', type=int, help='Device index for recording')
     parser.add_argument('--print-devices', action='store_true', help='Print list of audio devices and exit')
+    parser.add_argument('--prefix', type=str, default='audio_recording', help='Custom prefix for the filename')
+    parser.add_argument('--use-utc', action='store_true', help='Use UTC time for the filename timestamp (default is local time)')
+    parser.add_argument('--output-dir', type=str, default='.', help='Output directory for the recording files')
     args = parser.parse_args()
 
     if args.print_devices:
         print("Available audio devices:")
         print(sd.query_devices())
         sys.exit(0)
+
+    # Create output directory if it doesn't exist
+    output_dir = Path(args.output_dir)
+    if not output_dir.exists():
+        output_dir.mkdir(parents=True, exist_ok=True)
 
     start_time = datetime.now()
     elapsed_time = 0
@@ -71,7 +83,7 @@ def main():
                 print("Total recording duration reached. Exiting.")
                 break
 
-            filename = get_timestamped_filename()
+            filename = get_timestamped_filename(args.prefix, output_dir, use_utc=args.use_utc)
             audio_data = record_audio_chunk(args.duration, args.samplerate, args.channels, device=args.device)
             save_audio(filename, args.samplerate, audio_data)
 
