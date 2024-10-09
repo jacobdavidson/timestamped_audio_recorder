@@ -16,11 +16,14 @@ def dt_to_str(dt):
         dt_str += "Z"
         return dt_str
     else:
-        raise Exception("Got a datetime object not in UTC. Always use UTC.")
+        return dt_str
 
 # Function to generate timestamped filename
-def get_timestamped_filename(prefix):
-    now = datetime.now(timezone.utc)
+def get_timestamped_filename(prefix, use_utc=False):
+    if use_utc:
+        now = datetime.now(timezone.utc)
+    else:
+        now = datetime.now()
     timestamp_str = dt_to_str(now)
     filename = f"{prefix}_{timestamp_str}.wav"
     return filename
@@ -55,6 +58,7 @@ def main():
     parser.add_argument('--device', type=int, help='Device index for recording')
     parser.add_argument('--print-devices', action='store_true', help='Print list of audio devices and exit')
     parser.add_argument('--prefix', type=str, default='audio_recording', help='Custom prefix for the filename')
+    parser.add_argument('--use-utc', action='store_true', help='Use UTC time for the filename timestamp (default is local time)')
     args = parser.parse_args()
 
     if args.print_devices:
@@ -72,7 +76,7 @@ def main():
                 print("Total recording duration reached. Exiting.")
                 break
 
-            filename = get_timestamped_filename(args.prefix)
+            filename = get_timestamped_filename(args.prefix, use_utc=args.use_utc)
             audio_data = record_audio_chunk(args.duration, args.samplerate, args.channels, device=args.device)
             save_audio(filename, args.samplerate, audio_data)
 
