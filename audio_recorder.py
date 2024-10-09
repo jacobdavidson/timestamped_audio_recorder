@@ -39,8 +39,8 @@ def main():
     parser = argparse.ArgumentParser(description="Continuous Audio Recording Script")
     parser.add_argument('-d', '--duration', type=float, help='Duration of each recording chunk in seconds')
     parser.add_argument('-t', '--total-duration', type=float, help='Total duration of recording in seconds (default: runs indefinitely until cancelled)')
-    parser.add_argument('-r', '--samplerate', type=int, default=44100, help='Sampling rate in Hz')
-    parser.add_argument('-c', '--channels', type=int, default=2, help='Number of audio channels')
+    parser.add_argument('-r', '--samplerate', type=int, help='Sampling rate in Hz (default: maximum samplerate of the selected device if not provided)')
+    parser.add_argument('-c', '--channels', type=int, help='Number of audio channels (default: maximum number of input channels of the selected device if not provided)')
     parser.add_argument('--device', type=int, help='Device index for recording')
     parser.add_argument('--print-devices', action='store_true', help='Print list of audio devices and exit')
     parser.add_argument('--print-subtypes', action='store_true', help='Print list of available sound file subtypes and exit')
@@ -60,6 +60,15 @@ def main():
         print("Available sound file subtypes:")
         print(sf.available_subtypes())
         sys.exit(0)
+
+    # Set default samplerate and channels if not provided
+    if args.samplerate is None or args.channels is None:
+        device_info = sd.query_devices(args.device, 'input')
+        if args.samplerate is None:
+            # soundfile expects an int, sounddevice provides a float:
+            args.samplerate = int(device_info['default_samplerate'])
+        if args.channels is None:
+            args.channels = device_info['max_input_channels']
 
     # Determine chunk duration and total duration based on input
     if args.total_duration and not args.duration:
