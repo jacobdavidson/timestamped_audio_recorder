@@ -43,15 +43,22 @@ def main():
     parser.add_argument('-c', '--channels', type=int, default=2, help='Number of audio channels')
     parser.add_argument('--device', type=int, help='Device index for recording')
     parser.add_argument('--print-devices', action='store_true', help='Print list of audio devices and exit')
+    parser.add_argument('--print-subtypes', action='store_true', help='Print list of available sound file subtypes and exit')
     parser.add_argument('--prefix', type=str, default='audio_recording', help='Custom prefix for the filename')
     parser.add_argument('--use-utc', action='store_true', help='Use UTC time for the filename timestamp (default is local time)')
     parser.add_argument('--output-dir', type=str, default='.', help='Output directory for the recording files')
     parser.add_argument('--align-chunks', action='store_true', help='Align recording chunks to specific time boundaries')
+    parser.add_argument('--subtype', type=str, default='PCM_16', help='Sound file subtype (e.g., PCM_16, PCM_24, FLOAT)')
     args = parser.parse_args()
 
     if args.print_devices:
         print("Available audio devices:")
         print(sd.query_devices())
+        sys.exit(0)
+
+    if args.print_subtypes:
+        print("Available sound file subtypes:")
+        print(sf.available_subtypes())
         sys.exit(0)
 
     # Determine chunk duration and total duration based on input
@@ -101,7 +108,7 @@ def main():
 
                 # Write chunks for the specified duration
                 with sf.SoundFile(filename, mode='x', samplerate=args.samplerate,
-                                  channels=args.channels, subtype='PCM_16') as file:
+                                  channels=args.channels, subtype=args.subtype) as file:
                     chunk_start_time = time.time()
                     while time.time() - chunk_start_time < chunk_duration:
                         file.write(q.get())
