@@ -40,6 +40,12 @@ A Python script for continuous audio recording in timestamped chunks. This tool 
    pip install sounddevice scipy numpy
    ```
 
+**Note:** in case you get issues with PortAudio when trying the audio_recorder, try installing sounddevice via conda-forge instread
+
+```bash
+conda install -c conda-forge python-sounddevice
+```
+
 ## Usage
 
 ### Basic Usage
