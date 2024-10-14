@@ -1,9 +1,11 @@
 import sounddevice as sd
-from scipy.io.wavfile import write
-from datetime import datetime, timezone
-import numpy as np
+import soundfile as sf
+from datetime import datetime, timezone, timedelta
 import argparse
 import sys
+from pathlib import Path
+import queue
+import time
 
 # Function to convert datetime to formatted string
 def dt_to_str(dt):
@@ -14,68 +16,119 @@ def dt_to_str(dt):
         dt_str += ".{:06d}".format(dt.microsecond)
     if dt.tzinfo is not None and dt.utcoffset().total_seconds() == 0:
         dt_str += "Z"
-        return dt_str
-    else:
-        raise Exception("Got a datetime object not in UTC. Always use UTC.")
+    return dt_str
 
 # Function to generate timestamped filename
-def get_timestamped_filename():
-    now = datetime.now(timezone.utc)
+def get_timestamped_filename(prefix, output_dir, use_utc=False):
+    if use_utc:
+        now = datetime.now(timezone.utc)
+    else:
+        now = datetime.now()
     timestamp_str = dt_to_str(now)
-    filename = f"audio_recording_{timestamp_str}.wav"
-    return filename
+    filename = f"{prefix}_{timestamp_str}.wav"
+    return output_dir / filename
 
-# Function to record audio chunk
-def record_audio_chunk(duration, fs, channels, device=None):
-    print(f"Recording audio chunk for {duration} seconds...")
-    try:
-        audio_data = sd.rec(int(duration * fs), samplerate=fs, channels=channels, dtype='int16', device=device)
-        sd.wait()  # Wait for the recording to finish
-    except Exception as e:
-        print(f"An error occurred during recording: {e}")
-        sys.exit(1)
-    return audio_data
-
-# Function to save audio data to a file
-def save_audio(filename, fs, audio_data):
-    try:
-        write(filename, fs, audio_data)
-        print(f"Recording saved as {filename}")
-    except Exception as e:
-        print(f"An error occurred while saving the file: {e}")
-        sys.exit(1)
+# Callback function for streaming audio data
+def audio_callback(indata, frames, time, status):
+    if status:
+        print(status, file=sys.stderr)
+    q.put(indata.copy())
 
 # Main function
 def main():
     parser = argparse.ArgumentParser(description="Continuous Audio Recording Script")
-    parser.add_argument('-d', '--duration', type=float, default=60, help='Duration of each recording chunk in seconds')
+    parser.add_argument('-d', '--duration', type=float, help='Duration of each recording chunk in seconds')
     parser.add_argument('-t', '--total-duration', type=float, help='Total duration of recording in seconds (default: runs indefinitely until cancelled)')
-    parser.add_argument('-r', '--samplerate', type=int, default=44100, help='Sampling rate in Hz')
-    parser.add_argument('-c', '--channels', type=int, default=2, help='Number of audio channels')
+    parser.add_argument('-r', '--samplerate', type=int, help='Sampling rate in Hz (default: maximum samplerate of the selected device if not provided)')
+    parser.add_argument('-c', '--channels', type=int, help='Number of audio channels (default: maximum number of input channels of the selected device if not provided)')
     parser.add_argument('--device', type=int, help='Device index for recording')
     parser.add_argument('--print-devices', action='store_true', help='Print list of audio devices and exit')
+    parser.add_argument('--print-subtypes', action='store_true', help='Print list of available sound file subtypes and exit')
+    parser.add_argument('--prefix', type=str, default='audio_recording', help='Custom prefix for the filename')
+    parser.add_argument('--use-utc', action='store_true', help='Use UTC time for the filename timestamp (default is local time)')
+    parser.add_argument('--output-dir', type=str, default='.', help='Output directory for the recording files')
+    parser.add_argument('--align-chunks', action='store_true', help='Align recording chunks to specific time boundaries')
+    parser.add_argument('--subtype', type=str, default='PCM_16', help='Sound file subtype (e.g., PCM_16, PCM_24, FLOAT)')
     args = parser.parse_args()
 
+    if args.device is None:
+        print("No recording device specified. Please choose a device from the available list below:")
+        print(sd.query_devices())
+        sys.exit(1)
+    
     if args.print_devices:
         print("Available audio devices:")
         print(sd.query_devices())
         sys.exit(0)
 
-    start_time = datetime.now()
-    elapsed_time = 0
+    if args.print_subtypes:
+        print("Available sound file subtypes:")
+        print(sf.available_subtypes())
+        sys.exit(0)
+
+    # Set default samplerate and channels if not provided
+    if args.samplerate is None or args.channels is None:
+        device_info = sd.query_devices(args.device, 'input')
+        if args.samplerate is None:
+            # soundfile expects an int, sounddevice provides a float:
+            args.samplerate = int(device_info['default_samplerate'])
+        if args.channels is None:
+            args.channels = device_info['max_input_channels']
+
+    # Determine chunk duration and total duration based on input
+    if args.total_duration and not args.duration:
+        args.duration = args.total_duration
+    elif args.duration and not args.total_duration:
+        args.total_duration = args.duration
+
+    # Create output directory if it doesn't exist
+    output_dir = Path(args.output_dir)
+    if not output_dir.exists():
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+    global q
+    q = queue.Queue()
 
     try:
-        while True:
-            # Check if total duration is specified and if elapsed time exceeds it
-            if args.total_duration and elapsed_time >= args.total_duration:
-                print("Total recording duration reached. Exiting.")
-                break
+        with sd.InputStream(samplerate=args.samplerate, device=args.device,
+                            channels=args.channels, callback=audio_callback):
+            print('#' * 80)
+            print('Recording... Press Ctrl+C to stop the recording.')
+            print('#' * 80)
 
-            filename = get_timestamped_filename()
-            audio_data = record_audio_chunk(args.duration, args.samplerate, args.channels, device=args.device)
-            save_audio(filename, args.samplerate, audio_data)
+            start_time = datetime.now()
+            elapsed_time = 0
 
-            elapsed_time = (datetime.now() - start_time).total_seconds()
+            while True:
+                current_time = datetime.now()
+                if args.align_chunks:
+                    # Calculate the next alignment point based on the duration argument
+                    next_chunk_time = (current_time + timedelta(seconds=args.duration)).replace(second=0, microsecond=0)
+                    while next_chunk_time < current_time:
+                        next_chunk_time += timedelta(seconds=args.duration)
+
+                    duration_to_next_boundary = (next_chunk_time - current_time).total_seconds()
+                    chunk_duration = min(duration_to_next_boundary, args.duration)
+                else:
+                    chunk_duration = args.duration
+
+                print(f"Recording audio chunk for {chunk_duration} seconds...")
+                if args.total_duration and elapsed_time >= args.total_duration:
+                    print("Total recording duration reached. Exiting.")
+                    break
+
+                # Create a new chunk file
+                filename = get_timestamped_filename(args.prefix, output_dir, use_utc=args.use_utc)
+
+                # Write chunks for the specified duration
+                with sf.SoundFile(filename, mode='x', samplerate=args.samplerate,
+                                  channels=args.channels, subtype=args.subtype) as file:
+                    chunk_start_time = time.time()
+                    while time.time() - chunk_start_time < chunk_duration:
+                        file.write(q.get())
+
+                elapsed_time = (datetime.now() - start_time).total_seconds()
+
     except KeyboardInterrupt:
         print("\nRecording interrupted by user. Exiting.")
     except Exception as e:
