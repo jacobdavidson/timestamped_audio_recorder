@@ -75,11 +75,9 @@ def main():
         if args.channels is None:
             args.channels = device_info['max_input_channels']
 
-    # Determine chunk duration and total duration based on input
+    # Determine chunk duration based on input
     if args.total_duration and not args.duration:
         args.duration = args.total_duration
-    elif args.duration and not args.total_duration:
-        args.total_duration = args.duration
 
     # Create output directory if it doesn't exist
     output_dir = Path(args.output_dir)
@@ -113,7 +111,7 @@ def main():
                     chunk_duration = args.duration
 
                 print(f"Recording audio chunk for {chunk_duration} seconds...")
-                if args.total_duration and elapsed_time >= args.total_duration:
+                if args.total_duration and (elapsed_time >= args.total_duration):
                     print("Total recording duration reached. Exiting.")
                     break
 
