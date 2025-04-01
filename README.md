@@ -1,7 +1,7 @@
 
 # Timestamped Audio Recorder
 
-A Python script for continuous audio recording in timestamped chunks. This tool allows you to record audio continuously, splitting the recordings into manageable chunks with precise timestamps in the filenames.
+A Python script for continuous audio recording in timestamped chunks. This tool allows you to record audio continuously, splitting the recordings into manageable chunks with precise timestamps in the filenames. Recorded audio data is first written to a temporary directory and then moved to the final output directory, ensuring no dropouts in between chunks.
 
 ## Features
 
@@ -53,15 +53,21 @@ conda install -c conda-forge python-sounddevice
 Run the script with default settings:
 
 ```bash
-python audio_recorder.py
+python audio_recorder.py --device <DEVICE_INDEX> -d <CHUNK_DURATION>
+```
+
+For example, if --device 0 is available, you might do:
+
+```bash
+python audio_recorder.py --device 0 -d 60
 ```
 
 This command will:
 
-- Record audio indefinitely until you stop the script (`Ctrl+C`).
-- Record in chunks of **60 seconds** (this is the default, it can be changed).
-- Use the default audio input device.
-- Save recordings in the current directory with timestamped filenames.
+- Record audio from device 0, chunked into 60-second files.
+- Run indefinitely until you stop the script (Ctrl+C).
+- First write the active chunk in the tmp/ directory, then move it to the out/ directory once it’s done.
+- Save the recordings with timestamped filenames.
 
 ### Listing Audio Devices
 
@@ -88,52 +94,20 @@ Available audio devices:
 
 You can customize the recording using various command-line arguments:
 
-- **Chunk Duration** (`-d` or `--duration`): Duration of each recording chunk in seconds.
-- **Total Duration** (`-t` or `--total-duration`): Total duration of recording in seconds. If not specified, the script runs indefinitely until cancelled.
-- **Sampling Rate** (`-r` or `--samplerate`): Sampling rate in Hertz. Default is the maximum samplerate of the selected device if not provided.
-- **Channels** (`-c` or `--channels`): Number of audio channels. Default is the maximum number of input channels of the selected device if not provided.
-- **Device** (`--device`): Device index for recording. Use `--print-devices` to find the index.
-- **Output Directory** (`--output-dir`): Directory where recordings are saved. Default is the current directory (`.`).
-- **Prefix** (`--prefix`): Custom prefix for the filename. Default is `audio_recording`.
-- **Use UTC Time** (`--use-utc`): Use UTC time for the filename timestamp. By default, local time is used.
-- **Align Chunks** (`--align-chunks`): Align recording chunks to specific time boundaries.
-- **File Subtype** (`--subtype`): Specify the sound file subtype (e.g., `PCM_16`, `PCM_24`, `FLOAT`). Default is `PCM_16`.
-- **Print Available Subtypes** (`--print-subtypes`): Print a list of available sound file subtypes and exit.
-- **Help** (`-h` or `--help`): Show help message and exit.
+- **Chunk Duration** (-d or --duration): Duration of each recording chunk in seconds (required).
+- **Total Duration** (-t or --total-duration): Total duration of recording in seconds. If not specified, the script runs until you press Ctrl+C.
+- **Sampling Rate** (-r or --samplerate): Sampling rate in Hertz. Defaults to the device’s default sample rate if not specified.
+- **Channels** (-c or --channels): Number of input channels (e.g., mono=1, stereo=2). Defaults to device’s max input channels if not specified.
+- **Device** (--device): Device index for recording (required).
+- **Prefix** (--prefix): Custom prefix for each filename (default: audio_recording).
+- **Use UTC Time** (--use-utc): Use UTC timestamps in filenames (default is local time).
+- **Output Directory** (--out-dir): Final directory to store completed .wav files (default: out).
+- **Temporary Directory** (--tmp-dir): Directory to store the actively recorded chunk (default: tmp).
+- **File Subtype** (--subtype): Sound file subtype (e.g. PCM_16, PCM_24, FLOAT). Default is PCM_16.
+- **Print Available Subtypes** (--print-subtypes): List the supported file subtypes and exit.
+- **Print Devices** (--print-devices): List the available audio devices and exit.
+- **Help** (-h or --help): Show help message and exit.
 
-### Examples
-
-**Record in 30-Second Chunks Indefinitely**
-
-```bash
-python audio_recorder.py -d 30
-```
-
-**Record in 10-Second Chunks for a Total of 5 Minutes**
-
-```bash
-python audio_recorder.py -d 10 -t 300
-```
-
-**Record Using a Specific Device**
-
-```bash
-python audio_recorder.py --device 1
-```
-
-**Record Mono Audio at 48 kHz**
-
-```bash
-python audio_recorder.py -c 1 -r 48000
-```
-
-**Combine Multiple Parameters**
-
-```bash
-python audio_recorder.py -d 15 -t 120 --device 3 -c 1 -r 48000
-```
-
-This command records mono audio at 48 kHz using device index `3`, in 15-second chunks, for a total of 2 minutes.
 
 ### Filename Format
 
@@ -156,8 +130,5 @@ Components:
 
 This project is licensed under the [MIT License](LICENSE). You are free to use, modify, and distribute this software in accordance with the license terms.
 
----
-
-**Disclaimer**: Use this software responsibly and ensure compliance with local laws and regulations regarding audio recording and privacy.
 
 
