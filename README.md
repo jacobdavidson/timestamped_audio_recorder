@@ -29,7 +29,7 @@ A Python script for continuous audio recording in timestamped chunks. This tool 
 1. **Clone the Repository**
 
    ```bash
-   git clone https://github.com/yourusername/timestamped-audio-recorder.git
+   git clone https://github.com/jacobdavidson/timestamped-audio-recorder.git
    cd timestamped-audio-recorder
    ```
 
